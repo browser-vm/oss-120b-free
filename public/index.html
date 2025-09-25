@@ -46,15 +46,136 @@
         color: var(--primary-color);
       }
 
-      .chat-container {
+      /* Main app container */
+      .app-container {
         display: flex;
-        flex-direction: column;
         height: calc(100vh - 200px);
-        min-height: 400px;
+        max-width: 1200px;
+        margin: 0 auto;
         border: 1px solid var(--border-color);
         border-radius: 8px;
         overflow: hidden;
         animation: slideIn 0.5s ease-out;
+      }
+     
+      /* Sidebar styles */
+      .chat-sidebar {
+        width: 250px;
+        background-color: white;
+        border-right: 1px solid var(--border-color);
+        display: flex;
+        flex-direction: column;
+      }
+     
+      .sidebar-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem;
+        border-bottom: 1px solid var(--border-color);
+        background-color: var(--light-bg);
+      }
+     
+      .sidebar-header h2 {
+        margin: 0;
+        font-size: 1.1rem;
+        color: var(--text-color);
+      }
+     
+      .new-chat-btn {
+        background-color: var(--primary-color);
+        color: white;
+        border: none;
+        border-radius: 50%;
+        width: 32px;
+        height: 32px;
+        cursor: pointer;
+        font-size: 1.2rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background-color 0.2s;
+      }
+     
+      .new-chat-btn:hover {
+        background-color: var(--primary-hover);
+      }
+     
+      .chat-list {
+        flex: 1;
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        overflow-y: auto;
+      }
+     
+      .chat-item {
+        padding: 0.75rem 1rem;
+        cursor: pointer;
+        border-bottom: 1px solid #f0f0f0;
+        transition: background-color 0.2s;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+     
+      .chat-item:hover,
+      .chat-item.active {
+        background-color: var(--light-bg);
+      }
+     
+      .chat-item.active {
+        background-color: var(--primary-color);
+        color: white;
+      }
+     
+      .chat-item.active .chat-delete {
+        color: rgba(255, 255, 255, 0.7);
+      }
+     
+      .chat-title {
+        font-weight: 500;
+        flex: 1;
+      }
+     
+      .chat-preview {
+        font-size: 0.85rem;
+        color: var(--text-light);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 150px;
+      }
+     
+      .chat-delete {
+        background: none;
+        border: none;
+        color: var(--text-light);
+        cursor: pointer;
+        padding: 0.25rem;
+        border-radius: 3px;
+        font-size: 0.9rem;
+        opacity: 0;
+        transition: opacity 0.2s;
+      }
+     
+      .chat-item:hover .chat-delete,
+      .chat-item.active .chat-delete {
+        opacity: 1;
+      }
+     
+      .chat-delete:hover {
+        background-color: rgba(255, 0, 0, 0.1);
+        color: #dc2626;
+      }
+     
+      .chat-container {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        min-height: 400px;
+        background-color: var(--light-bg);
       }
 
       .chat-messages {
@@ -176,27 +297,36 @@
       <p>Powered by Cloudflare Workers AI</p>
     </header>
 
-    <div class="chat-container">
-      <div id="chat-messages" class="chat-messages">
-        <div class="message assistant-message">
-          <p>
-            Hello! I'm OSS-120b, an AI model from OpenAI (similar to ChatGPT, but smaller, and open-source!). How can I help you today?
-          </p>
+    <!-- Main chat app container with sidebar -->
+    <div class="app-container">
+      <div class="chat-sidebar">
+        <div class="sidebar-header">
+          <h2>Chats</h2>
+          <button id="new-chat-button" class="new-chat-btn">+</button>
         </div>
+        <ul id="chat-list" class="chat-list">
+          <!-- Chat items will be populated by JS -->
+        </ul>
       </div>
 
-      <div class="typing-indicator" id="typing-indicator">
-        AI is thinking...
-      </div>
+      <div class="chat-container">
+        <div id="chat-messages" class="chat-messages">
+          <!-- Initial messages will be rendered by JS -->
+        </div>
 
-      <div class="message-input">
-        <textarea
-          id="user-input"
-          placeholder="Type your message here..."
-          rows="1"
-          autofocus
-        ></textarea>
-        <button id="send-button">Send</button>
+        <div class="typing-indicator" id="typing-indicator">
+          AI is thinking...
+        </div>
+
+        <div class="message-input">
+          <textarea
+            id="user-input"
+            placeholder="Type your message here..."
+            rows="1"
+            autofocus
+          ></textarea>
+          <button id="send-button">Send</button>
+        </div>
       </div>
     </div>
 

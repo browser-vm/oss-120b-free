@@ -10,14 +10,43 @@ const userInput = document.getElementById("user-input");
 const sendButton = document.getElementById("send-button");
 // const typingIndicator = document.getElementById("typing-indicator");
 
-// Chat state
-let chatHistory = [
-  {
-    role: "assistant",
-    content:
-      "Hello! I'm OSS-120b, an AI model from OpenAI (similar to ChatGPT, but smaller, and open-source!) How can I help you today?",
-  },
-];
+// Data structures for multiple chats
+/**
+ * Interface for a single chat
+ * @typedef {Object} Chat
+ * @property {string} id - Unique chat identifier
+ * @property {string} title - Display title for the chat
+ * @property {Array} history - Array of chat messages
+ */
+
+/**
+ * All chats storage
+ * @type {Array<Chat>}
+ */
+let chats = [];
+
+/**
+ * Current active chat ID
+ * @type {string|null}
+ */
+let currentChatId = null;
+
+/**
+ * Current chat history (reference to active chat's history)
+ * @type {Array}
+ */
+let currentChatHistory = [];
+
+/**
+ * Welcome message for new chats
+ * @type {Object}
+ */
+const WELCOME_MESSAGE = {
+  role: "assistant",
+  content: "Hello! I'm OSS-120b, an AI model from OpenAI (similar to ChatGPT, but smaller, and open-source!) How can I help you today?"
+};
+
+// Global state
 let isProcessing = false;
 
 // Auto-resize textarea as user types
@@ -58,8 +87,17 @@ async function sendMessage() {
   userInput.value = "";
   userInput.style.height = "auto";
 
-  // Add message to history (for local display)
-  chatHistory.push({ role: "user", content: message });
+  // Add message to current chat history
+  currentChatHistory.push({ role: "user", content: message });
+
+  // Auto-save current chat
+  if (currentChatId) {
+    const currentChat = getCurrentChat();
+    if (currentChat) {
+      currentChat.history = currentChatHistory;
+      saveChat(currentChat);
+    }
+  }
 
   // Create thinking indicator as assistant message
   const thinkingEl = document.createElement("div");
@@ -77,15 +115,15 @@ async function sendMessage() {
     assistantMessageEl.innerHTML = "<p></p>";
     chatMessages.appendChild(assistantMessageEl);
 
-    // Scroll to bottom
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+     // Scroll to bottom
+     chatMessages.scrollTop = chatMessages.scrollHeight;
 
-    // Build oss-120b API request body
-    const requestBody = {
-      input: chatHistory.map((msg) => msg.content).join("\n"),
-      // Optionally add reasoning here, e.g.:
-      // reasoning: { effort: "medium", summary: "auto" }
-    };
+     // Build oss-120b API request body
+     const requestBody = {
+       input: currentChatHistory.map((msg) => msg.content).join("\n"),
+       // Optionally add reasoning here, e.g.:
+       // reasoning: { effort: "medium", summary: "auto" }
+     };
 
     // Send request to API
     const response = await fetch("/api/chat", {
@@ -155,10 +193,18 @@ async function sendMessage() {
   assistantMessageEl.querySelector("p").innerHTML = window.marked.parse(responseText);
   chatMessages.scrollTop = chatMessages.scrollHeight;
     }
+     // Add completed response to current chat history
+     currentChatHistory.push({ role: "assistant", content: responseText });
 
-    // Add completed response to chat history
-    chatHistory.push({ role: "assistant", content: responseText });
-  } catch (error) {
+     // Auto-save current chat
+     if (currentChatId) {
+       const currentChat = getCurrentChat();
+       if (currentChat) {
+         currentChat.history = currentChatHistory;
+         saveChat(currentChat);
+       }
+     }
+   } catch (error) {
     console.error("Error:", error);
     addMessageToChat(
       "assistant",
@@ -180,19 +226,303 @@ async function sendMessage() {
 }
 
 /**
- * Helper function to add message to chat
+ * Helper function to add message to chat UI
+ * Used for both appending new messages and re-rendering history when switching chats
  */
-function addMessageToChat(role, content) {
+function addMessageToChat(role, content, isReRender = false) {
   const messageEl = document.createElement("div");
   messageEl.className = `message ${role}-message`;
+  
   // Render markdown and line breaks for assistant, plain for user
   if (role === "assistant") {
     messageEl.innerHTML = `<p>${window.marked.parse(content)}</p>`;
   } else {
     messageEl.innerHTML = `<p>${content.replace(/\n/g, "<br>")}</p>`;
   }
-  chatMessages.appendChild(messageEl);
+  
+  if (!isReRender) {
+    chatMessages.appendChild(messageEl);
+    // Scroll to bottom only when appending new messages
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+  
+  return messageEl; // Return element for re-rendering use
+}
 
+
+/**
+ * LocalStorage operations for chat persistence
+ */
+
+/**
+ * Save all chats to localStorage
+ */
+function saveChats() {
+  try {
+    localStorage.setItem('oss120b_chats', JSON.stringify(chats));
+  } catch (error) {
+    console.error('Failed to save chats to localStorage:', error);
+  }
+}
+
+/**
+ * Load all chats from localStorage
+ * @returns {Array<Chat>} Array of chats or empty array if none found
+ */
+function loadAllChats() {
+  try {
+    const stored = localStorage.getItem('oss120b_chats');
+    if (stored) {
+      chats = JSON.parse(stored);
+      // Validate loaded chats have required properties
+      chats = chats.filter(chat => chat.id && chat.title && Array.isArray(chat.history));
+      return chats;
+    }
+  } catch (error) {
+    console.error('Failed to load chats from localStorage:', error);
+  }
+  return [];
+}
+
+/**
+ * Save a single chat to localStorage (updates the chats array)
+ * @param {Chat} chat - The chat to save
+ */
+function saveChat(chat) {
+  const index = chats.findIndex(c => c.id === chat.id);
+  if (index > -1) {
+    chats[index] = chat;
+  } else {
+    chats.push(chat);
+  }
+  saveChats();
+}
+
+/**
+ * Delete a chat by ID
+ * @param {string} chatId - ID of chat to delete
+ * @returns {boolean} True if deleted, false if not found
+ */
+function deleteChat(chatId) {
+  const index = chats.findIndex(c => c.id === chatId);
+  if (index > -1) {
+    chats.splice(index, 1);
+    saveChats();
+    // If deleting current chat, reset current
+    if (currentChatId === chatId) {
+      currentChatId = null;
+      currentChatHistory = [];
+    }
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Set the current chat by ID
+ * @param {string} chatId - ID of chat to set as current
+ */
+function setCurrentChat(chatId) {
+  const chat = chats.find(c => c.id === chatId);
+  if (chat) {
+    currentChatId = chatId;
+    currentChatHistory = chat.history;
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Get the current chat object
+ * @returns {Chat|null} Current chat or null if none set
+ */
+function getCurrentChat() {
+  return currentChatId ? chats.find(c => c.id === currentChatId) : null;
+}
+
+/**
+ * Update the current chat's history reference
+ */
+function updateCurrentChatHistory() {
+  if (currentChatId) {
+    const chat = getCurrentChat();
+    if (chat) {
+      currentChatHistory = chat.history;
+    }
+  }
+}
+
+/**
+ * Chat management handlers
+ */
+
+/**
+ * Create a new chat
+ * @returns {string} ID of the new chat
+ */
+function createNewChat() {
+  const newChatId = 'chat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+  const newChat = {
+    id: newChatId,
+    title: 'New Chat',
+    history: [JSON.parse(JSON.stringify(WELCOME_MESSAGE))] // Deep copy welcome message
+  };
+  
+  chats.push(newChat);
+  saveChats();
+  setCurrentChat(newChatId);
+  renderChatHistory();
+  updateChatList();
+  return newChatId;
+}
+
+/**
+ * Switch to a different chat
+ * @param {string} chatId - ID of chat to switch to
+ */
+function switchChat(chatId) {
+  if (setCurrentChat(chatId)) {
+    // Save previous chat if it was modified
+    if (currentChatId && currentChatId !== chatId) {
+      const prevChat = getCurrentChat();
+      if (prevChat) {
+        prevChat.history = currentChatHistory;
+        saveChat(prevChat);
+      }
+    }
+    renderChatHistory();
+    updateChatList();
+  }
+}
+
+/**
+ * Render the current chat's history to the UI
+ */
+function renderChatHistory() {
+  // Clear existing messages
+  chatMessages.innerHTML = '';
+  
+  // Render all messages in current history
+  currentChatHistory.forEach(message => {
+    const messageEl = addMessageToChat(message.role, message.content, true);
+    chatMessages.appendChild(messageEl);
+  });
+  
   // Scroll to bottom
   chatMessages.scrollTop = chatMessages.scrollHeight;
 }
+
+/**
+ * Update the chat list in the sidebar
+ */
+function updateChatList() {
+  const chatList = document.getElementById('chat-list');
+  if (!chatList) return;
+  
+  chatList.innerHTML = '';
+  
+  chats.forEach(chat => {
+    const li = document.createElement('li');
+    li.className = `chat-item ${chat.id === currentChatId ? 'active' : ''}`;
+    li.dataset.chatId = chat.id;
+    
+    const preview = chat.history.length > 1 ? chat.history[1].content.substring(0, 50) + '...' : 'No messages yet';
+    
+    li.innerHTML = `
+      <div class="chat-title">${chat.title}</div>
+      <div class="chat-preview">${preview}</div>
+      <button class="chat-delete" data-chat-id="${chat.id}">×</button>
+    `;
+    
+    li.addEventListener('click', (e) => {
+      if (!e.target.classList.contains('chat-delete')) {
+        switchChat(chat.id);
+      }
+    });
+    
+    chatList.appendChild(li);
+  });
+}
+
+/**
+ * Delete chat handler
+ * @param {string} chatId - ID of chat to delete
+ */
+function deleteChatHandler(chatId) {
+  if (confirm('Are you sure you want to delete this chat? This cannot be undone.')) {
+    deleteChat(chatId);
+    updateChatList();
+    // If no chats left, create a new one
+    if (chats.length === 0) {
+      createNewChat();
+    } else if (!currentChatId) {
+      // Set first chat as current if current was deleted
+      setCurrentChat(chats[0].id);
+      renderChatHistory();
+    }
+  }
+}
+
+// Event listeners for chat management
+document.addEventListener('DOMContentLoaded', function() {
+  const newChatButton = document.getElementById('new-chat-button');
+  const chatList = document.getElementById('chat-list');
+  
+  if (newChatButton) {
+    newChatButton.addEventListener('click', createNewChat);
+  }
+  
+  if (chatList) {
+    chatList.addEventListener('click', (e) => {
+      if (e.target.classList.contains('chat-delete')) {
+        const chatId = e.target.dataset.chatId;
+        deleteChatHandler(chatId);
+      }
+    });
+  }
+});
+
+/**
+ * Initialize the chat application on page load
+ */
+function initializeChatApp() {
+  // Load chats from localStorage
+  loadAllChats();
+  
+  // If no chats exist, create a new one
+  if (chats.length === 0) {
+    createNewChat();
+  } else {
+    // Set the most recent chat as current (last in array)
+    const lastChatId = chats[chats.length - 1].id;
+    setCurrentChat(lastChatId);
+    renderChatHistory();
+  }
+  
+  // Update chat list UI
+  updateChatList();
+  
+  // Focus input
+  userInput.focus();
+}
+
+// Update DOMContentLoaded listener to call initialization
+document.addEventListener('DOMContentLoaded', function() {
+  initializeChatApp();
+  
+  const newChatButton = document.getElementById('new-chat-button');
+  const chatList = document.getElementById('chat-list');
+  
+  if (newChatButton) {
+    newChatButton.addEventListener('click', createNewChat);
+  }
+  
+  if (chatList) {
+    chatList.addEventListener('click', (e) => {
+      if (e.target.classList.contains('chat-delete')) {
+        const chatId = e.target.dataset.chatId;
+        deleteChatHandler(chatId);
+      }
+    });
+  }
+});
