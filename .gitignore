@@ -1,2 +1,4 @@
 node_modules/
 .wrangler/
+kilo-code-settings.json
+.kilocode/

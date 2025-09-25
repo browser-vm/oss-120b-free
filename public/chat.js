@@ -8,14 +8,14 @@
 const chatMessages = document.getElementById("chat-messages");
 const userInput = document.getElementById("user-input");
 const sendButton = document.getElementById("send-button");
-const typingIndicator = document.getElementById("typing-indicator");
+// const typingIndicator = document.getElementById("typing-indicator");
 
 // Chat state
 let chatHistory = [
   {
     role: "assistant",
     content:
-      "Hello! I'm OSS-120b, an open-source AI model from OpenAI. How can I help you today?",
+      "Hello! I'm OSS-120b, an AI model from OpenAI (similar to ChatGPT, but smaller, and open-source!) How can I help you today?",
   },
 ];
 let isProcessing = false;
@@ -58,14 +58,20 @@ async function sendMessage() {
   userInput.value = "";
   userInput.style.height = "auto";
 
-  // Show typing indicator
-  typingIndicator.classList.add("visible");
-
   // Add message to history (for local display)
   chatHistory.push({ role: "user", content: message });
 
+  // Create thinking indicator as assistant message
+  const thinkingEl = document.createElement("div");
+  thinkingEl.className = "message assistant-message";
+  thinkingEl.id = "thinking-indicator";
+  thinkingEl.innerHTML = '<p><em>AI is thinking...</em></p>';
+  chatMessages.appendChild(thinkingEl);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+
   try {
-    // Create new assistant response element
+    // Remove thinking indicator and create new assistant response element
+    thinkingEl.remove();
     const assistantMessageEl = document.createElement("div");
     assistantMessageEl.className = "message assistant-message";
     assistantMessageEl.innerHTML = "<p></p>";
@@ -159,8 +165,11 @@ async function sendMessage() {
       "Sorry, there was an error processing your request.",
     );
   } finally {
-    // Hide typing indicator
-    typingIndicator.classList.remove("visible");
+    // Remove thinking indicator if it still exists (in case of error before removal)
+    const thinkingIndicator = document.getElementById("thinking-indicator");
+    if (thinkingIndicator) {
+      thinkingIndicator.remove();
+    }
 
     // Re-enable input
     isProcessing = false;
