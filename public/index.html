@@ -54,6 +54,7 @@
         border: 1px solid var(--border-color);
         border-radius: 8px;
         overflow: hidden;
+        animation: slideIn 0.5s ease-out;
       }
 
       .chat-messages {
@@ -98,6 +99,17 @@
         font-weight: bold;
       }
 
+      @keyframes slideIn {
+        from {
+          transform: translateX(100%);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+
       .message-input {
         display: flex;
         padding: 0.75rem;
@@ -123,11 +135,15 @@
         border: none;
         border-radius: 4px;
         cursor: pointer;
-        transition: background-color 0.2s;
+        transition: all 0.3s ease;
+        transform: scale(1);
+        box-shadow: none;
       }
 
       #send-button:hover {
         background-color: var(--primary-hover);
+        transform: scale(1.05);
+        box-shadow: 0 2px 8px rgba(246, 130, 31, 0.3);
       }
 
       #send-button:disabled {
