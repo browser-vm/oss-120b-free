@@ -61,7 +61,7 @@ async function sendMessage() {
   // Show typing indicator
   typingIndicator.classList.add("visible");
 
-  // Add message to history
+  // Add message to history (for local display)
   chatHistory.push({ role: "user", content: message });
 
   try {
@@ -74,15 +74,20 @@ async function sendMessage() {
     // Scroll to bottom
     chatMessages.scrollTop = chatMessages.scrollHeight;
 
+    // Build oss-120b API request body
+    const requestBody = {
+      input: chatHistory.map((msg) => msg.content).join("\n"),
+      // Optionally add reasoning here, e.g.:
+      // reasoning: { effort: "medium", summary: "auto" }
+    };
+
     // Send request to API
     const response = await fetch("/api/chat", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        messages: chatHistory,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     // Handle errors
@@ -90,38 +95,59 @@ async function sendMessage() {
       throw new Error("Failed to get response");
     }
 
-    // Process streaming response
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
     let responseText = "";
-
-    while (true) {
-      const { done, value } = await reader.read();
-
-      if (done) {
-        break;
-      }
-
-      // Decode chunk
-      const chunk = decoder.decode(value, { stream: true });
-
-      // Process SSE format
-      const lines = chunk.split("\n");
-      for (const line of lines) {
-        try {
-          const jsonData = JSON.parse(line);
-          if (jsonData.response) {
-            // Append new content to existing text
-            responseText += jsonData.response;
+    const contentType = response.headers.get("content-type");
+    if (contentType && contentType.includes("text/event-stream")) {
+      // Process streaming response (SSE)
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        // Each SSE event may be a line of JSON or plain text
+        const lines = chunk.split("\n");
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            // Try to parse as JSON
+            const jsonData = JSON.parse(line);
+            if (jsonData.response) {
+              responseText += jsonData.response;
+              assistantMessageEl.querySelector("p").textContent = responseText;
+              chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+          } catch {
+            // If not JSON, treat as plain text
+            responseText += line;
             assistantMessageEl.querySelector("p").textContent = responseText;
-
-            // Scroll to bottom
             chatMessages.scrollTop = chatMessages.scrollHeight;
           }
-        } catch (e) {
-          console.error("Error parsing JSON:", e);
         }
       }
+    } else {
+      // Non-streaming: assume JSON
+      const data = await response.json();
+      if (data && typeof data === "object" && Array.isArray(data.output)) {
+        // Find the assistant message in output
+        const assistantMsg = data.output.find(
+          (item) => item.type === "message" && item.role === "assistant"
+        );
+        if (assistantMsg && Array.isArray(assistantMsg.content)) {
+          // Find the first content with type 'output_text'
+          const textObj = assistantMsg.content.find(
+            (c) => c.type === "output_text" && typeof c.text === "string"
+          );
+          responseText = textObj ? textObj.text : "[No response text found]";
+        } else {
+          responseText = "[No assistant message found]";
+        }
+      } else {
+        responseText = String(data);
+      }
+  // Render markdown and line breaks using marked.js
+  assistantMessageEl.querySelector("p").innerHTML = window.marked.parse(responseText);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
     // Add completed response to chat history
@@ -150,7 +176,12 @@ async function sendMessage() {
 function addMessageToChat(role, content) {
   const messageEl = document.createElement("div");
   messageEl.className = `message ${role}-message`;
-  messageEl.innerHTML = `<p>${content}</p>`;
+  // Render markdown and line breaks for assistant, plain for user
+  if (role === "assistant") {
+    messageEl.innerHTML = `<p>${window.marked.parse(content)}</p>`;
+  } else {
+    messageEl.innerHTML = `<p>${content.replace(/\n/g, "<br>")}</p>`;
+  }
   chatMessages.appendChild(messageEl);
 
   // Scroll to bottom

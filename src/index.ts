@@ -57,35 +57,66 @@ async function handleChatRequest(
   env: Env,
 ): Promise<Response> {
   try {
-    // Parse JSON request body
-    const { messages = [] } = (await request.json()) as {
-      messages: ChatMessage[];
+    // Parse JSON request body according to oss-120b API schema
+    // Define the oss-120b input schema type
+    type Oss120bInput = {
+      input: string | any[];
+      reasoning?: {
+        effort?: "low" | "medium" | "high";
+        summary?: "auto" | "concise" | "detailed";
+      };
     };
-
-    // Add system prompt if not present
-    if (!messages.some((msg) => msg.role === "system")) {
-      messages.unshift({ role: "system", content: SYSTEM_PROMPT });
+    const body = await request.json() as Oss120bInput;
+    const { input, reasoning } = body;
+    if (!input) {
+      return new Response(
+        JSON.stringify({ error: 'Missing required "input" field.' }),
+        { status: 400, headers: { 'content-type': 'application/json' } }
+      );
     }
 
+    // Prepare model payload
+    const payload: any = {
+      input,
+      max_tokens: 1024,
+    };
+    if (reasoning) {
+      payload.reasoning = reasoning;
+    }
+
+    // Call model
     const response = await env.AI.run(
-      MODEL_ID,
-      {
-        messages,
-        max_tokens: 1024,
-      },
+      MODEL_ID as any,
+      payload,
       {
         returnRawResponse: true,
-        // Uncomment to use AI Gateway
-        // gateway: {
-        //   id: "YOUR_GATEWAY_ID", // Replace with your AI Gateway ID
-        //   skipCache: false,      // Set to true to bypass cache
-        //   cacheTtl: 3600,        // Cache time-to-live in seconds
-        // },
+        gateway: {
+          id: "oss-120b-free",
+          skipCache: false,
+          cacheTtl: 3600,
+        },
       },
     );
 
-    // Return streaming response
-    return response;
+    // Output: oneOf application/json or text/event-stream
+    // If response is a stream, set content-type accordingly
+    if (response instanceof Response) {
+      // If streaming, set content-type to text/event-stream
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('text/event-stream')) {
+        return response;
+      }
+      // Otherwise, assume JSON
+      return new Response(await response.text(), {
+        status: response.status,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    // Fallback: return as JSON
+    return new Response(JSON.stringify(response), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
   } catch (error) {
     console.error("Error processing chat request:", error);
     return new Response(
