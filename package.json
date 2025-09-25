@@ -1,6 +1,6 @@
 {
   "name": "oss-120b-free",
-  "description": "A simple chat application powered by Cloudflare Workers AI",
+  "description": "A simple demo of OSS-120b powered by Cloudflare AI.",
   "private": true,
   "cloudflare": {
     "label": "LLM Chat App",
